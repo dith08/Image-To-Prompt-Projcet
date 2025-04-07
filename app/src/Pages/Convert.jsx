@@ -4,19 +4,19 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 const genAI = new GoogleGenerativeAI("AIzaSyD-49kCODEEYvaC2D6qj7_pVLJXXRUvOdg");
 
 const System = () => {
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [previewUrl, setPreviewUrl] = useState(null);
-  const [description, setDescription] = useState("");
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [previewUrls, setPreviewUrls] = useState([]);
+  const [descriptions, setDescriptions] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     return () => {
-      if (previewUrl) {
-        URL.revokeObjectURL(previewUrl);
-      }
+      previewUrls.forEach(url => {
+        if (url) URL.revokeObjectURL(url);
+      });
     };
-  }, [previewUrl]);
+  }, [previewUrls]);
 
   const toBase64 = (file) =>
     new Promise((resolve, reject) => {
@@ -27,147 +27,272 @@ const System = () => {
     });
 
   const handleFileChange = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      setSelectedFile(file);
-      setDescription("");
+    const files = Array.from(event.target.files);
+    if (files.length) {
+      setSelectedFiles(prevFiles => [...prevFiles, ...files]);
       setError(null);
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-      setPreviewUrl(URL.createObjectURL(file));
-    } else {
-      setSelectedFile(null);
-      setPreviewUrl(null);
-      setDescription("");
-      setError(null);
+      
+      // Create new preview URLs for new files only
+      const newPreviewUrls = files.map(file => URL.createObjectURL(file));
+      setPreviewUrls(prevUrls => [...prevUrls, ...newPreviewUrls]);
     }
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    if (!selectedFile) {
-      setError("Please select an image file first.");
+    if (!selectedFiles.length) {
+      setError("Please select at least one image file.");
       return;
     }
 
     setIsLoading(true);
     setError(null);
-    setDescription("");
+    setDescriptions([]);
 
     try {
-      const base64Image = await toBase64(selectedFile);
-      const imageBase64 = base64Image.split(",")[1];
+      const results = await Promise.all(
+        selectedFiles.map(async (file) => {
+          const base64Image = await toBase64(file);
+          const imageBase64 = base64Image.split(",")[1];
 
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+          const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
 
-      const result = await model.generateContent({
-        contents: [
-          {
-            parts: [
+          const result = await model.generateContent({
+            contents: [
               {
-                text: "Deskripsikan Tentang Gambar ini",
-              },
-              {
-                inlineData: {
-                  mimeType: selectedFile.type,
-                  data: imageBase64,
-                },
+                parts: [
+                  {
+                    text: "Describe the image in exactly 50 words. Focus on the setting, people or objects involved, their emotions or actions, and the overall mood or atmosphere. Be detailed but concise. Use descriptive language that brings the scene to life, making the reader feel like they are seeing the image themselves",
+                  },
+                  {
+                    inlineData: {
+                      mimeType: file.type,
+                      data: imageBase64,
+                    },
+                  },
+                ],
               },
             ],
-          },
-        ],
-      });
+          });
 
-      const text = result.response.candidates?.[0]?.content?.parts?.[0]?.text;
-      setDescription(text || "No description found.");
+          return {
+            fileName: file.name,
+            description: result.response.candidates?.[0]?.content?.parts?.[0]?.text || "No description found."
+          };
+        })
+      );
+
+      setDescriptions(results);
     } catch (err) {
       console.error("Gemini SDK Error:", err);
-      setError("An error occurred while generating the description.");
+      setError("An error occurred while generating the descriptions.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleDownload = () => {
-    const blob = new Blob([description], { type: "text/plain" });
+  const handleDownload = (description, index) => {
+    const csvContent = `File Name,Description\n"${description.fileName}","${description.description}"`;
+    const blob = new Blob([csvContent], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = selectedFile ? `${selectedFile.name.split(".")[0]}-description.txt` : "description.txt";
+    a.download = `description-${index + 1}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadAll = () => {
+    const csvContent = descriptions.map((desc, index) => 
+      `"${desc.fileName}","${desc.description}"`
+    ).join('\n');
+    const fullCsvContent = `File Name,Description\n${csvContent}`;
+    const blob = new Blob([fullCsvContent], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `all-descriptions.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
   return (
-    <div className="container mx-auto max-w-2xl p-6 bg-white rounded-lg shadow-md mt-10 text-center font-sans">
-      <h1 className="text-3xl font-bold mb-6 text-gray-800">Image Description Generator</h1>
+    <div className="min-h-screen bg-gradient-to-br from-blue-100 to-purple-100 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="container mx-auto max-w-4xl bg-white/80 backdrop-blur-sm p-8 rounded-2xl shadow-xl">
+        <h1 className="text-4xl font-bold mb-8 text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">
+          AI Bulk Image Description Generator
+        </h1>
 
-      <form onSubmit={handleSubmit} className="mb-8">
-        <label htmlFor="imageFile" className="block text-lg font-medium text-gray-700 mb-2">
-          Choose an image:
-        </label>
-        <input
-          type="file"
-          id="imageFile"
-          name="file"
-          accept="image/*"
-          onChange={handleFileChange}
-          disabled={isLoading}
-          className="block w-full text-sm text-gray-500 mb-4
-                     file:mr-4 file:py-2 file:px-4
-                     file:rounded-full file:border-0
-                     file:text-sm file:font-semibold
-                     file:bg-blue-50 file:text-blue-700
-                     hover:file:bg-blue-100
-                     disabled:opacity-50 disabled:cursor-not-allowed"
-        />
-        <button
-          type="submit"
-          disabled={isLoading || !selectedFile}
-          className="w-full sm:w-auto px-6 py-2 bg-blue-600 text-white font-semibold rounded-md shadow-sm
-                     hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500
-                     disabled:bg-gray-400 disabled:cursor-not-allowed transition duration-150 ease-in-out"
-        >
-          {isLoading ? (
-            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path
-                className="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 
-                3.042 1.135 5.824 3 7.938l3-2.647z"
-              ></path>
-            </svg>
-          ) : null}
-          {isLoading ? "Processing..." : "Get Description"}
-        </button>
-      </form>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="relative group">
+            <label
+              htmlFor="imageFile"
+              className="block text-lg font-medium text-gray-700 mb-2"
+            >
+              Upload Your Images
+            </label>
+            <input
+              type="file"
+              id="imageFile"
+              name="file"
+              accept="image/*"
+              onChange={handleFileChange}
+              disabled={isLoading}
+              multiple
+              className="block w-full text-sm text-gray-500 
+                       file:mr-4 file:py-3 file:px-6
+                       file:rounded-full file:border-0
+                       file:text-sm file:font-semibold
+                       file:bg-gradient-to-r file:from-blue-500 file:to-purple-500 file:text-white
+                       hover:file:opacity-90
+                       disabled:opacity-50 disabled:cursor-not-allowed
+                       transition duration-300 ease-in-out"
+            />
+          </div>
 
-      {error && <p className="text-red-600 font-semibold mt-4 p-3 bg-red-100 rounded-md">Error: {error}</p>}
-
-      {previewUrl && (
-        <div className="mt-6">
-          <h2 className="text-xl font-semibold mb-3 text-gray-700">Preview:</h2>
-          <img
-            id="imagePreview"
-            src={previewUrl}
-            alt="Selected preview"
-            className={`max-w-full max-h-96 mx-auto border border-gray-300 rounded-md shadow-sm transition-opacity duration-300 ease-in-out ${isLoading ? "opacity-50" : "opacity-100"}`}
-          />
-        </div>
-      )}
-
-      <div className="mt-8">
-        <h2 className="text-xl font-semibold mb-3 text-gray-700">Description:</h2>
-        <div id="result" className="p-4 bg-gray-100 border border-gray-200 rounded-md min-h-[60px] text-left text-gray-800">
-          {isLoading && <p className="text-gray-500 italic">Loading description...</p>}
-          {!isLoading && description && <p>{description}</p>}
-          {!isLoading && !description && !error && <p className="text-gray-500">Upload an image and click "Get Description".</p>}
-        </div>
-        {!isLoading && description && (
-          <button onClick={handleDownload} className="mt-4 px-4 py-2 bg-green-600 text-white font-semibold rounded-md hover:bg-green-700 transition">
-            Download as .txt
+          <button
+            type="submit"
+            disabled={isLoading || !selectedFiles.length}
+            className="w-full py-3 px-6 bg-gradient-to-r from-blue-500 to-purple-500 text-white font-bold rounded-full
+                     hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500
+                     disabled:opacity-50 disabled:cursor-not-allowed
+                     transform transition duration-300 ease-in-out hover:scale-105
+                     shadow-lg hover:shadow-xl"
+          >
+            {isLoading ? (
+              <div className="flex items-center justify-center">
+                <svg
+                  className="animate-spin h-5 w-5 mr-3"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
+                </svg>
+                Processing...
+              </div>
+            ) : (
+              "Generate Descriptions"
+            )}
           </button>
+        </form>
+
+        {error && (
+          <div className="mt-6 p-4 bg-red-100 border-l-4 border-red-500 rounded-r-lg">
+            <p className="text-red-700 font-medium">Error: {error}</p>
+          </div>
         )}
+
+        {previewUrls.length > 0 && (
+          <div className="mt-8 p-6 bg-gray-50 rounded-xl shadow-inner">
+            <h2 className="text-2xl font-bold mb-4 text-gray-800">
+              Image Previews
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {previewUrls.map((url, index) => (
+                <div key={index} className="relative group">
+                  <img
+                    src={url}
+                    alt={`Preview ${index + 1}`}
+                    className={`w-full h-48 object-cover rounded-lg shadow-md transition-all duration-300 
+                              ${isLoading ? "opacity-50 blur-sm" : "opacity-100"}
+                              group-hover:shadow-xl`}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="mt-8">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-2xl font-bold text-gray-800">
+              Generated Descriptions
+            </h2>
+            {descriptions.length > 0 && (
+              <button
+                onClick={handleDownloadAll}
+                className="px-6 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold rounded-full
+                         hover:opacity-90 transform transition duration-300 ease-in-out hover:scale-105
+                         shadow-lg hover:shadow-xl flex items-center"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-5 w-5 mr-2"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                  />
+                </svg>
+                Download All
+              </button>
+            )}
+          </div>
+          <div className="bg-white rounded-xl shadow-inner p-6">
+            {isLoading && (
+              <div className="flex items-center justify-center h-full">
+                <p className="text-gray-500 animate-pulse">
+                  Generating descriptions...
+                </p>
+              </div>
+            )}
+            {!isLoading && descriptions.length > 0 && (
+              <div className="space-y-4">
+                {descriptions.map((desc, index) => (
+                  <div key={index} className="p-4 bg-gray-50 rounded-lg">
+                    <h3 className="font-bold mb-2">Image {index + 1} - {desc.fileName}</h3>
+                    <p className="text-gray-700 leading-relaxed">{desc.description}</p>
+                    <button
+                      onClick={() => handleDownload(desc, index)}
+                      className="mt-4 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold rounded-full
+                               hover:opacity-90 transform transition duration-300 ease-in-out hover:scale-105
+                               shadow-lg hover:shadow-xl flex items-center"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-5 w-5 mr-2"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                        />
+                      </svg>
+                      Download Description
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {!isLoading && !descriptions.length && !error && (
+              <p className="text-gray-500 text-center italic">
+                Upload images and click "Generate Descriptions" to start
+              </p>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
