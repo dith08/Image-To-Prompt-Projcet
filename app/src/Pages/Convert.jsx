@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const genAI = new GoogleGenerativeAI("AIzaSyD-49kCODEEYvaC2D6qj7_pVLJXXRUvOdg");
+const genAI = new GoogleGenerativeAI("AIzaSyA2XQn7HP9NpvcB_1vkxGcZ1-0UgUK4fMk");
 
 const System = () => {
   const [selectedFiles, setSelectedFiles] = useState([]);
@@ -62,7 +62,7 @@ const System = () => {
               {
                 parts: [
                   {
-                    text: "Describe the image in exactly 50 words. Focus on the setting, people or objects involved, their emotions or actions, and the overall mood or atmosphere. Be detailed but concise. Use descriptive language that brings the scene to life, making the reader feel like they are seeing the image themselves",
+                    text: "Generate a vivid and engaging 50-word description of the image below. Focus on key visual elements such as colors, lighting, mood, composition, and notable objects or people. Use expressive and descriptive language suitable for product listings, blogs, or social media. Avoid generic phrases. Highlight what makes the image unique.",
                   },
                   {
                     inlineData: {
@@ -264,3 +264,4 @@ const System = () => {
 };
 
 export default System;
+ 
