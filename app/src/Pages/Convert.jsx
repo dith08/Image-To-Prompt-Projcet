@@ -29,6 +29,10 @@ const System = () => {
   const handleFileChange = (event) => {
     const files = Array.from(event.target.files);
     if (files.length) {
+      if (files.length > 1000) {
+        setError("Maximum 1000 files can be processed at once");
+        return;
+      }
       setSelectedFiles((prevFiles) => [...prevFiles, ...files]);
       setError(null);
 
@@ -37,7 +41,8 @@ const System = () => {
     }
   };
 
-  const processFilesInBatches = async (files, batchSize = 50) => {
+
+  const processFilesInBatches = async (files, batchSize = 10) => {
     const results = [];
     for (let i = 0; i < files.length; i += batchSize) {
       const batch = files.slice(i, i + batchSize);
@@ -84,9 +89,11 @@ const System = () => {
       );
       results.push(...batchResults);
 
-      // Add a small delay between batches to prevent rate limiting
+
+      // Add delay between batches to prevent rate limiting
       if (i + batchSize < files.length) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        await new Promise((resolve) => setTimeout(resolve, 2000));
       }
     }
     return results;
@@ -96,6 +103,11 @@ const System = () => {
     event.preventDefault();
     if (!selectedFiles.length) {
       setError("Please select at least one image file.");
+      return;
+    }
+
+    if (selectedFiles.length > 1000) {
+      setError("Maximum 1000 files can be processed at once");
       return;
     }
 
@@ -120,10 +132,8 @@ const System = () => {
   };
 
   const handleDownload = (description, index) => {
-    const header = `File Name,Description\n`;
-    const row = `${escapeCSV(description.fileName)}\n${escapeCSV(
-      description.description
-    )}`;
+    const header = `Description\n`;
+    const row = `${escapeCSV(description.description)}`;
     const csvContent = `${header}${row}`;
 
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -140,16 +150,15 @@ const System = () => {
   const handleDownloadAll = () => {
     if (!descriptions.length) return;
 
-    const header = ["File Name", "Description"];
+    const header = ["Description"];
     const rows = descriptions.map((desc) => {
-      const fileName = desc.fileName.replace(/"/g, '""');
       const description = desc.description
         .replace(/"/g, '""')
         .replace(/\n/g, " ");
-      return `"${fileName}"\n"${description}"`;
+      return `"${description}"`;
     });
 
-    const csvContent = `\uFEFF${header.join(",")}\n${rows.join("\n\n")}`;
+    const csvContent = `\uFEFF${header.join("\n")}\n${rows.join("\n\n")}`;
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -167,30 +176,57 @@ const System = () => {
         </h1>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="relative group">
-            <label
-              htmlFor="imageFile"
-              className="block text-lg font-medium text-gray-700 mb-2"
-            >
-              Upload Your Images
-            </label>
-            <input
-              type="file"
-              id="imageFile"
-              name="file"
-              accept="image/*"
-              onChange={handleFileChange}
-              disabled={isLoading}
-              multiple
-              className="block w-full text-sm text-gray-500 
-                       file:mr-4 file:py-3 file:px-6
-                       file:rounded-full file:border-0
-                       file:text-sm file:font-semibold
-                       file:bg-gradient-to-r file:from-blue-500 file:to-purple-500 file:text-white
-                       hover:file:opacity-90
-                       disabled:opacity-50 disabled:cursor-not-allowed
-                       transition duration-300 ease-in-out"
-            />
+          <div className="flex items-center gap-4">
+            <div className="relative group flex-1">
+              <label
+                htmlFor="imageFile"
+                className="block text-lg font-medium text-gray-700 mb-2"
+              >
+                Upload Your Images
+              </label>
+              <input
+                type="file"
+                id="imageFile"
+                name="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                disabled={isLoading}
+                multiple
+                className="block w-full text-sm text-gray-500 
+                         file:mr-4 file:py-3 file:px-6
+                         file:rounded-full file:border-0
+                         file:text-sm file:font-semibold
+                         file:bg-gradient-to-r file:from-blue-500 file:to-purple-500 file:text-white
+                         hover:file:opacity-90
+                         disabled:opacity-50 disabled:cursor-not-allowed
+                         transition duration-300 ease-in-out"
+              />
+            </div>
+            {descriptions.length > 0 && (
+              <button
+                type="button"
+                onClick={handleDownloadAll}
+                className="px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold rounded-full
+                         hover:opacity-90 transform transition duration-300 ease-in-out hover:scale-105
+                         shadow-lg hover:shadow-xl flex items-center self-end"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-5 w-5 mr-2"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                  />
+                </svg>
+                Download All
+              </button>
+            )}
           </div>
 
           <button
@@ -262,35 +298,9 @@ const System = () => {
         )}
 
         <div className="mt-8">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-bold text-gray-800">
-              Generated Descriptions
-            </h2>
-            {descriptions.length > 0 && (
-              <button
-                onClick={handleDownloadAll}
-                className="px-6 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold rounded-full
-                         hover:opacity-90 transform transition duration-300 ease-in-out hover:scale-105
-                         shadow-lg hover:shadow-xl flex items-center"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-5 w-5 mr-2"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                  />
-                </svg>
-                Download All
-              </button>
-            )}
-          </div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-4">
+            Generated Descriptions
+          </h2>
           <div className="bg-white rounded-xl shadow-inner p-6">
             {isLoading && (
               <div className="flex items-center justify-center h-full">
