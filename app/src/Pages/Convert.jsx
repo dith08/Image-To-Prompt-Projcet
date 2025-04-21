@@ -132,7 +132,7 @@ const System = () => {
   };
 
   const handleDownload = (description, index) => {
-    const header = `Description\n`;
+    const header = `Prompt\n`;
     const row = `${escapeCSV(description.description)}`;
     const csvContent = `${header}${row}`;
 
@@ -150,7 +150,7 @@ const System = () => {
   const handleDownloadAll = () => {
     if (!descriptions.length) return;
 
-    const header = ["Description"];
+    const header = ["Prompt"];
     const rows = descriptions.map((desc) => {
       const description = desc.description
         .replace(/"/g, '""')
