@@ -59,7 +59,7 @@ const System = () => {
                 {
                   parts: [
                     {
-                      text: "Generate a vivid and engaging 15-word description of the image below. Focus on key visual elements such as colors, lighting, mood, composition, and notable objects or people. Use expressive and descriptive language suitable for product listings, blogs, or social media. Avoid generic phrases. Highlight what makes the image unique.",
+                      text1: "Generate a vivid and engaging 15-word description of the image below. Focus on key visual elements such as colors, lighting, mood, composition, and notable objects or people. Use expressive and descriptive language suitable for product listings, blogs, or social media. Avoid generic phrases. Highlight what makes the image unique.",
                     },
                     {
                       inlineData: {
